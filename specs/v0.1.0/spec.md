@@ -155,15 +155,59 @@ and displays them in a dashboard — all running locally via `docker compose up`
 - [ ] The FastAPI service logs provider 500 errors clearly and does not crash.
 - [ ] The sync job reports failure status when a provider 500 occurs.
 
-### AC-005b: Advanced Error Handling — P1 (FR-107, FR-204)
+### AC-005b: P1a Provider Error Simulation — Contract-Drafted / Pending Review (FR-204)
 
-- [ ] The simulator returns 429 under predictable conditions.
-- [ ] The FastAPI service retries on 429 with backoff.
+> **Status:** Contract-Drafted / Pending Review. Simulator implementation exists on
+> `feature/p1a-pagination-and-429` at `c62b6e9e4ea3ee26478307bbd78089214ba8786f`
+> but is not yet merged or live-E2E-verified.
 
-### AC-006: Pagination — P1 (US-006, FR-109, FR-203)
+- [ ] Authentication is evaluated first: missing/invalid `X-API-Key` returns
+      `401` before any simulation or pagination validation.
+- [ ] Following successful authentication, supported `simulate_error=429` and
+      `simulate_error=500` take precedence over duplicate checks and pagination
+      validation.
+- [ ] `simulate_error=429` returns HTTP `429`, `Content-Type: application/json`,
+      `Retry-After: 5`, and exact body:
+      `{"error":"Too Many Requests","message":"Simulated rate limit exceeded. Please retry after 5 seconds."}`
+- [ ] Existing `simulate_error=500` behavior remains unchanged.
+- [ ] Unknown `simulate_error` values fall through to ordinary successful
+      response (observed simulator behavior, not a system-wide guarantee).
+- [ ] API P0 has mocked coverage for downstream provider `429` → public `503`
+      mapping; this criterion does not assert live cross-service coverage.
 
-- [ ] The simulator supports `page` and `per_page` query parameters.
-- [ ] The FastAPI service iterates all pages until exhausted.
+### AC-006: P1a Provider Pagination — Contract-Drafted / Pending Review (US-006, FR-203)
+
+> **Status:** Contract-Drafted / Pending Review. Simulator implementation exists on
+> `feature/p1a-pagination-and-429` at `c62b6e9e4ea3ee26478307bbd78089214ba8786f`
+> but is not yet merged or live-E2E-verified.
+
+- [ ] `page` defaults to `1`; valid values are canonical positive integers ≥ 1.
+- [ ] `per_page` defaults to `10`; valid values are canonical integers from `1`
+      through `100`.
+- [ ] These defaults and `100` maximum are simulator P1a constraints, not
+      universal provider-adapter standards.
+- [ ] Successful `200` responses retain top-level `invoices` and include a
+      `pagination` object with integer fields `page`, `per_page`, `total_items`,
+      and `total_pages`.
+- [ ] A request beyond the final page returns `200` with `invoices: []` and
+      accurate pagination metadata.
+- [ ] Invalid `page` returns `400` with exact body:
+      `{"error":"Bad Request","message":"Invalid 'page' parameter: must be an integer >= 1."}`
+- [ ] Invalid `per_page` returns `400` with exact body:
+      `{"error":"Bad Request","message":"Invalid 'per_page' parameter: must be an integer between 1 and 100."}`
+- [ ] Duplicate `page` returns `400` with exact body:
+      `{"error":"Bad Request","message":"Duplicate 'page' query parameter."}`
+- [ ] Duplicate `per_page` returns `400` with exact body:
+      `{"error":"Bad Request","message":"Duplicate 'per_page' query parameter."}`
+
+### AC-006b: P1a API Compatibility — Contract-Drafted / Pending Review
+
+> **Status:** Contract-Drafted / Pending Review.
+
+- [ ] API P0 remains backward-compatible because `invoices` remains a top-level
+      response key.
+- [ ] API P0 may ignore `pagination` and does not yet traverse subsequent
+      provider pages.
 
 ### AC-007: Contract Governance (US-007, FR-003, FR-004)
 
