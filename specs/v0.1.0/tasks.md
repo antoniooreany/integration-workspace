@@ -146,6 +146,46 @@
 
 ## P1 — Validation and Process Documentation
 
+### T-005b: P1a Contract Amendment — Provider Pagination and 429 Simulation
+
+- **Status:** 🔄
+- **Priority:** P1
+- **Branch:** `feature/contract-p1a-amendment`
+- **Dependencies:** P0 contract baseline (T-001 scope delivered in
+  `invoice-sync-v0.1.md`).
+- **Description:** Amend the existing `invoice-sync-v0.1.md` contract in place
+  to formalize simulator-specific P1a provider behavior: pagination query
+  parameters (`page`, `per_page`) with defaults, ranges, validation errors, and
+  duplicate detection; deterministic `simulate_error=429` with `Retry-After: 5`;
+  and authentication-first, simulation-before-validation precedence rules.
+- **Simulator Implementation Reference:**
+  - **Repository:** `sage-provider-simulator`
+  - **Branch:** `feature/p1a-pagination-and-429`
+  - **Commit:** `c62b6e9e4ea3ee26478307bbd78089214ba8786f`
+  - The simulator implementation predates this contract amendment and **must not
+    be merged** until this contract amendment has been reviewed and merged.
+  - The simulator implementation is not yet contract-approved, PR-approved,
+    merged, or live-E2E-verified.
+- **Deliverables:**
+  - Amended `docs/contracts/invoice-sync-v0.1.md`
+  - Updated `specs/v0.1.0/spec.md` (P1a acceptance criteria)
+  - Updated `specs/v0.1.0/tasks.md` (this task)
+- **Acceptance Criteria:**
+  - [ ] Contract documents pagination parameters, defaults, and ranges.
+  - [ ] Contract documents exact 400 error bodies for invalid and duplicate
+        parameters.
+  - [ ] Contract documents exact 429 response body and `Retry-After: 5` header.
+  - [ ] Contract documents authentication-first precedence.
+  - [ ] Contract documents simulation-before-pagination-validation precedence.
+  - [ ] Contract documents P0 API compatibility (top-level `invoices` retained).
+  - [ ] Contract `Version: 0.1` and `Status: Draft` remain unchanged.
+  - [ ] Spec has measurable P1a acceptance criteria marked as
+        Contract-Drafted / Pending Review.
+  - [ ] No claim of simulator merge or live-E2E verification.
+- **Traces to:** FR-203, FR-204, AC-005b, AC-006, AC-006b, CSI-001
+
+---
+
 ### T-006: Create Integration Smoke Tests
 
 - **Status:** ⬜
@@ -293,5 +333,6 @@ graph TD
 | Priority | Tasks | Status |
 |---|---|---|
 | **P0** | T-001, T-002, T-003, T-004, T-005 | ⬜ Not started |
+| **P1** | T-005b | 🔄 In progress |
 | **P1** | T-006, T-007, T-008, T-009 | ⬜ Not started |
 | **P2** | T-010, T-011 | ⬜ Not started |
