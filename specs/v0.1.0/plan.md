@@ -23,10 +23,10 @@
 
 | Aspect | Details |
 |---|---|
-| **Owns** | Public API endpoints, sync orchestration, invoice normalization, MySQL persistence, Swagger docs, web dashboard |
-| **Does not own** | Provider simulation, API contract definition, Compose orchestration |
-| **Technology** | Python, FastAPI, SQLAlchemy/MySQL, Jinja2 templates |
-| **Key files** | `app/`, `tests/`, `Dockerfile`, `requirements.txt`, `alembic/` |
+| **Owns** | Public API endpoints, synchronous sync orchestration, invoice normalization, Swagger docs, web dashboard |
+| **Does not own** | Provider simulation, API contract definition, Compose orchestration, persistence |
+| **Technology** | Python, FastAPI, Jinja2 templates |
+| **Key files** | `app/`, `tests/`, `Dockerfile`, `requirements.txt` |
 
 ### 1.3 `sage-provider-simulator` (Flask)
 
@@ -46,12 +46,11 @@
 
 ```mermaid
 graph TB
-    subgraph "Docker Compose Network (integration-workspace)"
+    subgraph "Docker Compose Network (integration-workspace) — P0 planned"
         direction TB
 
         subgraph "unified-finance-integration-api"
             API["FastAPI Service<br/>:8000"]
-            DB["MySQL 8<br/>:3306"]
             DASH["Dashboard UI"]
         end
 
@@ -61,22 +60,27 @@ graph TB
             SIMUI["Simulator UI"]
         end
 
-        API -->|"GET /api/v1/invoices<br/>X-API-Key auth<br/>Pagination"| SIM
+        API -->|"POST /api/v1/sync/invoices<br/>X-API-Key auth"| SIM
         SIM -->|"JSON responses<br/>200/429/500"| API
-        API -->|"INSERT/SELECT"| DB
         SIM --> FIX
         API --> DASH
         SIM --> SIMUI
     end
 
-    DEV["Developer"] -->|"docker compose up"| API
-    DEV -->|"Browser :8000"| DASH
+    DEV["Developer"] -.->|"planned docker compose up"| API
     DEV -->|"Browser :5000"| SIMUI
     DEV -->|"Swagger :8000/docs"| API
 
     CONTRACT["Provider API Contract<br/>(integration-workspace)"] -.->|"defines"| SIM
     CONTRACT -.->|"consumed by"| API
 ```
+
+> **P0 architecture notes:** This diagram shows the **planned** P0 topology.
+> It contains exactly `api` and `simulator` services. There is **no database
+> service, no MySQL container, no schema, no INSERT/SELECT path, and no
+> persistence layer** in P0. The dotted edge to `docker compose up` reflects
+> that the P0 Compose implementation has not yet been authored, executed, or
+> verified.
 
 ---
 
@@ -122,25 +126,30 @@ sequenceDiagram
 
 ## 4. Docker Compose and Environment Plan
 
-### 4.1 `compose.yaml` (future — P0 implementation)
+### 4.1 `compose.yaml` (planned — P0 implementation)
 
-Services to define:
+The P0 Compose file is **planned** and has **not yet been authored, executed,
+or verified**. When it is later implemented, it must define exactly two
+services:
 
-| Service | Image | Ports | Depends On | Health Check |
+| Service | Build context | Ports | Depends On | Health Check |
 |---|---|---|---|---|
-| `api` | Build from `../unified-finance-integration-api` | `8000:8000` | `db`, `simulator` | `GET /health` |
-| `simulator` | Build from `../sage-provider-simulator` | `5000:5000` | — | `GET /health` |
-| `db` | `mysql:8` | `3306:3306` | — | `mysqladmin ping` |
+| `api` | `../unified-finance-integration-api` | `8000:8000` | `simulator` (healthy) | `GET /health` |
+| `simulator` | `../sage-provider-simulator` | `5000:5000` | — | `GET /health` |
 
-### 4.2 `.env.example` (future — P0 implementation)
+**No database service, no MySQL container, no `db` service, no database
+volume, no database port mapping, no database health check, and no database
+environment variable is defined for P0.** The API depends on a healthy
+simulator over Docker service DNS.
+
+### 4.2 `.env.example` (planned — P0 implementation)
+
+The P0 `.env.example` is **planned** and has **not yet been authored**. When
+it is later implemented, it must contain only the variables required by the
+`api` and `simulator` services, with no `MYSQL_*` or `DATABASE_URL`
+variables. The intended shape is:
 
 ```env
-# === Database ===
-MYSQL_ROOT_PASSWORD=changeme
-MYSQL_DATABASE=unified_finance
-MYSQL_USER=app
-MYSQL_PASSWORD=changeme
-
 # === Provider Simulator ===
 PROVIDER_BASE_URL=http://simulator:5000
 PROVIDER_API_KEY=test-api-key-not-a-secret
@@ -148,15 +157,20 @@ PROVIDER_API_KEY=test-api-key-not-a-secret
 # === FastAPI ===
 API_HOST=0.0.0.0
 API_PORT=8000
-DATABASE_URL=mysql+pymysql://app:changeme@db:3306/unified_finance
 
 # === Flask Simulator ===
 SIMULATOR_HOST=0.0.0.0
 SIMULATOR_PORT=5000
+PROVIDER_API_KEY=test-api-key-not-a-secret
 ```
 
-> **Note:** The `.env.example` values are placeholders for local development.
-> The `PROVIDER_API_KEY` is a non-secret test value (per A-007).
+**Notes:**
+- `PROVIDER_BASE_URL=http://simulator:5000` is the Docker service DNS name
+  that the `api` container uses to reach the `simulator` container.
+- `PROVIDER_API_KEY` is a non-secret test value, shared between API and
+  simulator for local development.
+- No `DATABASE_URL`, `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`,
+  or `MYSQL_PASSWORD` variable is part of P0.
 
 ---
 
@@ -260,7 +274,7 @@ For changes spanning multiple repositories:
 | R-001 | Contract drift between workspace and service repos | Broken integration | Medium | Contract change workflow, P1 contract tests |
 | R-002 | Docker networking differences across OS | Flaky local startup | Medium | Document platform-specific issues, test multi-OS |
 | R-003 | Scope creep beyond P0 | Delayed delivery | High | Strict P0/P1/P2 gating, YAGNI enforcement |
-| R-004 | MySQL startup latency | Flaky health checks | Low | Health check retries, `depends_on` with `condition: service_healthy` |
+| R-004 | Drift back into database or persistence work in P0 | Re-introduces schema, INSERT/SELECT, MySQL, or `DATABASE_URL` into P0 | Medium | Explicit P0 architecture assumption (api + simulator only), explicit out-of-scope items, requirement that any persistence work is separately approved future work |
 
 ### 7.2 Trade-Offs
 
@@ -268,7 +282,8 @@ For changes spanning multiple repositories:
 |---|---|
 | Static fixture data in simulator | Simpler but less flexible; acceptable for P0 local demo |
 | Single Docker Compose file | Simpler but couples all services; acceptable for local dev |
-| No database migrations tool in P0 | Auto-create schema on startup; migrations deferred to P1 |
+| **No database in P0** | P0 is stateless and synchronous; persistence requires separately approved future architecture, contract, spec, and implementation work |
+| **Live provider-`429` → public API `503` E2E deferred to P1** | P0 retains mocked API `429` mapping coverage only; live cross-service coverage is a separate P1 task |
 | No CI in integration-workspace for P0 | Focus on service-level CI first; workspace CI added in P1 |
 
 ### 7.3 v0.1.0 Limitations
@@ -325,10 +340,23 @@ Before moving to implementation in any repository, the following gates must pass
 
 After all gates pass, the recommended implementation order is:
 
-1. **integration-workspace:** compose.yaml, .env.example, provider contract, README.
-2. **sage-provider-simulator:** Flask app, fixtures, core invoice endpoint, API-key authentication, and a basic 500 error scenario. _(Pagination and the 429 scenario remain P1 only.)_
-3. **unified-finance-integration-api:** FastAPI app, DB schema, sync job, normalization, dashboard.
-4. **integration-workspace:** Integration smoke tests, contract tests.
+1. **integration-workspace:** planned `compose.yaml` (P0: `api` + `simulator`
+   only), planned `.env.example` (no `MYSQL_*` or `DATABASE_URL`), provider
+   contract, README, environment-conventions doc.
+2. **sage-provider-simulator:** Flask app, fixtures, core invoice endpoint,
+   API-key authentication, `/health`, and a basic 500 error scenario.
+   _(Pagination and the 429 scenario remain P1 only.)_
+3. **unified-finance-integration-api:** FastAPI app, `/health`, synchronous
+   `POST /api/v1/sync/invoices`, validation, normalization, dashboard UI.
+   **No database, schema, migration, INSERT/SELECT path, or persistence is
+   part of this step.** Any persistence work requires separately approved
+   future architecture, contract, spec, and implementation.
+4. **integration-workspace:** planned P0 success-path Compose E2E (simulator
+   health, API health, one `POST /api/v1/sync/invoices` success-path request,
+   HTTP `200` and documented response envelope, **no fixed invoice count**);
+   contract tests (P1); live cross-service `429` E2E (deferred to separate P1
+   task).
 
 > This order ensures the contract is defined before either service implements it,
-> and the simulator is available for the API to consume during development.
+> the simulator is available for the API to consume during development, and no
+> database work is started inside P0.
