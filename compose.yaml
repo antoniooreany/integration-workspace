@@ -1,0 +1,44 @@
+services:
+  simulator:
+    build:
+      context: ../sage-provider-simulator
+    ports:
+      - "${SIMULATOR_PORT:-5000}:5000"
+    environment:
+      PROVIDER_API_KEY: ${PROVIDER_API_KEY:-test-api-key-not-a-secret}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  api:
+    build:
+      context: ../unified-finance-integration-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      PROVIDER_BASE_URL: ${PROVIDER_BASE_URL:-http://simulator:5000}
+      PROVIDER_API_KEY: ${PROVIDER_API_KEY:-test-api-key-not-a-secret}
+    depends_on:
+      simulator:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s

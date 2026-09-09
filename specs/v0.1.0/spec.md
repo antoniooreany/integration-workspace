@@ -15,9 +15,13 @@ invoice synchronization from a provider simulator to a unified API service.
 It consists of three repositories with strict service boundaries, orchestrated
 via Docker Compose in the integration workspace.
 
-The P0 goal is an end-to-end value flow: the FastAPI service fetches invoices
-from the Flask provider simulator, normalizes them, persists them to MySQL,
-and displays them in a dashboard — all running locally via `docker compose up`.
+The P0 goal is a **synchronous, stateless API-to-simulator value flow**: the
+FastAPI service fetches invoices from the Flask provider simulator, validates
+and normalizes them, and returns them in the response — **without persistence,
+without a database, and without a dashboard data layer**. The P0 Compose
+topology that will host this flow is **planned** to consist of exactly two
+services, `api` and `simulator`, and is **not yet implemented, validated, or
+executed**.
 
 ---
 
@@ -32,8 +36,9 @@ and displays them in a dashboard — all running locally via `docker compose up`
 ### US-002: Invoice Synchronization
 
 > As a user, I want the Unified API to fetch invoices from the provider
-> simulator, normalize them, and store them in the database so that I can
-> view consolidated invoice data.
+> simulator, validate and normalize them, and return the synchronized data
+> in the response so that I can consume consolidated invoice data without
+> requiring any local persistence.
 
 ### US-003: Dashboard View
 
@@ -69,8 +74,8 @@ and displays them in a dashboard — all running locally via `docker compose up`
 
 | ID | Requirement | Priority |
 |---|---|---|
-| FR-001 | Provide a `compose.yaml` that starts all services (FastAPI, Flask, MySQL) with a single command | P0 |
-| FR-002 | Provide `.env.example` with all required environment variables and placeholder values | P0 |
+| FR-001 | Provide a planned `compose.yaml` whose P0 service list is exactly `api` and `simulator`; no database service, container, volume, or network dependency is defined for P0 | P0 |
+| FR-002 | Provide `.env.example` with all required environment variables and placeholder values; no `MYSQL_*` or `DATABASE_URL` variables for P0 | P0 |
 | FR-003 | Own and version the provider API contract (OpenAPI or JSON schema) | P0 |
 | FR-004 | Document the contract change workflow | P0 |
 | FR-005 | Document local-development setup in README | P0 |
@@ -78,18 +83,18 @@ and displays them in a dashboard — all running locally via `docker compose up`
 | FR-007 | Define integration smoke tests that verify end-to-end flow | P1 |
 | FR-008 | Define contract tests that validate provider API compliance | P1 |
 | FR-009 | Document release process and Gitflow workflow | P1 |
-| FR-010 | Provide health-check configuration for all services in Compose | P0 |
+| FR-010 | Provide health-check configuration for the `api` and `simulator` services in Compose; no database health check exists for P0 | P0 |
 
 ### 3.2 Unified Finance Integration API (FastAPI — separate repository)
 
 | ID | Requirement | Priority |
 |---|---|---|
-| FR-101 | Expose `/api/v1/invoices` endpoint to list normalized invoices | P0 |
-| FR-102 | Implement sync job to fetch invoices from provider simulator | P0 |
+| FR-101 | Expose a synchronous `POST /api/v1/sync/invoices` endpoint that returns the normalized invoices fetched from the provider simulator in the response | P0 |
+| FR-102 | On each sync invocation, the API fetches invoices from the provider simulator | P0 |
 | FR-103 | Normalize provider invoice format to unified schema | P0 |
-| FR-104 | Persist normalized invoices to MySQL | P0 |
+| FR-104 | **Removed from P0 scope.** Persistence is deferred to separately approved future architecture, contract, spec, and implementation work. P0 is stateless. | — |
 | FR-105 | Serve Swagger/OpenAPI documentation | P0 |
-| FR-106 | Serve a web dashboard displaying synchronized invoices | P0 |
+| FR-106 | Serve a web dashboard | P0 |
 | FR-107 | Handle provider 429 responses with retry and backoff | P1 |
 | FR-108 | Handle provider 500 responses with clear error handling and logging (retries deferred to P1) | P0 |
 | FR-109 | Handle paginated provider responses | P1 |
@@ -126,17 +131,43 @@ and displays them in a dashboard — all running locally via `docker compose up`
 
 ### AC-001: Local Startup (US-001, FR-001, FR-002, NFR-001)
 
-- [ ] `docker compose up` starts FastAPI, Flask, and MySQL.
-- [ ] All services are healthy within 60 seconds.
-- [ ] `.env.example` contains all required variables with placeholder values.
+- [ ] When the planned P0 `compose.yaml` is implemented and executed, `docker compose up`
+      starts exactly the `api` and `simulator` services; no `db`, MySQL, database
+      container, database volume, database health check, or `DATABASE_URL` /
+      `MYSQL_*` variable is part of the P0 service set.
+- [ ] Both `api` and `simulator` expose a `/health` endpoint.
+- [ ] `.env.example` (when later implemented for P0) contains only the variables
+      required by `api` and `simulator`, with placeholder values.
 - [ ] No real credentials are required or present.
+- [ ] This acceptance criterion documents the **planned** P0 service set and
+      configuration; it does not assert that Compose, health checks, or startup
+      have been implemented, executed, or verified.
 
-### AC-002: End-to-End Invoice Sync (US-002, FR-102, FR-103, FR-104)
+### AC-002: End-to-End Invoice Sync (US-002, FR-101, FR-102, FR-103)
 
-- [ ] Triggering a sync job in the FastAPI service fetches invoices from the simulator.
-- [ ] Invoices are normalized to the unified schema.
-- [ ] Normalized invoices are persisted in MySQL.
-- [ ] Subsequent GET `/api/v1/invoices` returns the persisted data.
+- [ ] `POST /api/v1/sync/invoices` on the FastAPI service synchronously fetches
+      invoices from the provider simulator over Docker service DNS using
+      `PROVIDER_BASE_URL=http://simulator:5000`.
+- [ ] The API validates and normalizes the provider response into the unified
+      schema and returns the result in the HTTP response body.
+- [ ] Responses are stateless: the API does not persist, queue, or cache the
+      result between requests.
+- [ ] The expected invoice count returned by the simulator is intentionally
+      not fixed; success-path validation asserts HTTP `200` and the documented
+      response envelope, not a specific invoice count.
+- [ ] When the planned P0 Compose E2E is later implemented, it will validate
+      only: simulator health; API health; one `POST /api/v1/sync/invoices`
+      success-path request; HTTP `200` and the documented response shape; with
+      no fixed invoice count.
+- [ ] **No database, persistence layer, schema, or migration is part of P0.**
+      Persistence requires separately approved future architecture, contract,
+      spec, and implementation work.
+- [ ] **Live provider-`429` → public API `503` E2E is deferred to a separate P1
+      task.** P0 retains mocked API `429` mapping coverage only; this
+      acceptance criterion does not assert live cross-service `429` E2E
+      coverage in P0.
+- [ ] No URL hack, query-string injection, public test endpoint, retries/backoff
+      logic, or API runtime change is introduced to satisfy this criterion.
 
 ### AC-003: Dashboard Display (US-003, FR-106)
 
@@ -220,12 +251,24 @@ and displays them in a dashboard — all running locally via `docker compose up`
 ## 6. Assumptions
 
 - A-001: Docker and Docker Compose are available on the developer's machine.
-- A-002: MySQL runs as a container managed by Compose, not an external service.
-- A-003: The provider simulator uses static fixture data, not a database.
-- A-004: All services communicate over a Docker bridge network.
-- A-005: The provider API contract is owned by the integration workspace.
-- A-006: v0.1.0 targets local development only; no cloud deployment.
-- A-007: The X-API-Key for the simulator is a non-secret test value.
+- A-002: The planned P0 Compose service set is exactly `api` and `simulator`;
+  no database service, container, volume, network dependency, health check,
+  or environment variable (`MYSQL_*`, `DATABASE_URL`, or equivalent) is part
+  of P0.
+- A-003: The API uses Docker service DNS to reach the simulator with
+  `PROVIDER_BASE_URL=http://simulator:5000`.
+- A-004: P0 is stateless: the API synchronously fetches, validates, normalizes,
+  and returns invoices without persisting them; MySQL, SQLAlchemy, database
+  schemas, INSERT/SELECT flow, and migration tooling are out of P0 scope and
+  require separately approved future architecture, contract, spec, and
+  implementation work.
+- A-005: The provider simulator uses static fixture data, not a database.
+- A-006: All services communicate over a Docker bridge network.
+- A-007: The provider API contract is owned by the integration workspace.
+- A-008: v0.1.0 targets local development only; no cloud deployment.
+- A-009: The X-API-Key for the simulator is a non-secret test value.
+- A-010: Live provider-`429` → public API `503` E2E coverage is deferred to a
+  separate P1 task; P0 retains only mocked API `429` mapping coverage.
 
 ---
 
@@ -242,6 +285,11 @@ and displays them in a dashboard — all running locally via `docker compose up`
 - OS-009: CD pipeline (no real deployment target exists).
 - OS-010: LLM-based features or AI-powered analysis.
 - OS-011: Mobile or native application support.
+- OS-012: MySQL, SQLAlchemy, or any database service, container, schema, volume,
+  `MYSQL_*` or `DATABASE_URL` variable in P0; any persistence work requires
+  separately approved future architecture, contract, spec, and implementation.
+- OS-013: Live provider-`429` → public API `503` end-to-end coverage in P0;
+  live cross-service `429` E2E is deferred to a separate P1 task.
 
 ---
 
@@ -272,6 +320,7 @@ These invariants apply across all three repositories (traced to constitution):
 | R-002 | Docker networking issues across platforms | Document known issues, test on Windows/macOS/Linux |
 | R-003 | Scope creep into real provider integration | Explicit out-of-scope list, constitution invariant INV-003 |
 | R-004 | Over-engineering beyond P0 needs | KISS/YAGNI principles (INV-012), P0/P1/P2 gates (INV-010) |
+| R-005 | Drift back into database or persistence work in P0 | Explicit P0 architecture assumptions (A-002, A-004, A-010), dedicated out-of-scope items (OS-012, OS-013), and the requirement that any persistence work is separately approved future work |
 
 ---
 

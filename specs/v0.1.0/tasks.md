@@ -54,26 +54,38 @@
 
 ---
 
-### T-002: Create Docker Compose Configuration
+### T-002: Plan and Document P0 Docker Compose Configuration
 
 - **Status:** ⬜
 - **Priority:** P0
 - **Branch:** `feature/compose-setup`
 - **Dependencies:** T-001 (contract defines service interactions).
-- **Description:** Create `compose.yaml` defining three services (api, simulator, db)
-  with build contexts, ports, environment variables, networks, and health checks.
-- **Deliverables:**
-  - `compose.yaml`
-  - `.env.example`
+- **Description:** Plan and document a P0 `compose.yaml` whose service set is
+  exactly `api` and `simulator` (no database service, container, volume,
+  health check, port mapping, or environment variable). The API reaches the
+  simulator over Docker service DNS using
+  `PROVIDER_BASE_URL=http://simulator:5000`. The accompanying `.env.example`
+  defines only the variables required by `api` and `simulator`, with
+  placeholder values and no `MYSQL_*` / `DATABASE_URL` variables.
+- **Deliverables (planned — not yet implemented, executed, or verified):**
+  - `compose.yaml` (planned) defining `api` and `simulator` only
+  - `.env.example` (planned) with non-secret placeholder values
 - **Acceptance Criteria:**
-  - [ ] `compose.yaml` defines `api`, `simulator`, and `db` services.
-  - [ ] `api` builds from `../unified-finance-integration-api`.
-  - [ ] `simulator` builds from `../sage-provider-simulator`.
-  - [ ] `db` uses `mysql:8` image.
-  - [ ] All services are on a shared Docker network.
-  - [ ] Health checks are configured for all services.
-  - [ ] `api` depends on `db` and `simulator` with health conditions.
-  - [ ] `.env.example` contains all required variables with placeholder values.
+  - [ ] Planned `compose.yaml` defines exactly `api` and `simulator` services
+        (no `db`, MySQL, or other database service).
+  - [ ] `api` builds from `../unified-finance-integration-api`, port `8000`.
+  - [ ] `simulator` builds from `../sage-provider-simulator`, port `5000`.
+  - [ ] Both services expose `/health` and are on a shared Docker network.
+  - [ ] `api` depends on a healthy `simulator` via `depends_on` with
+        `condition: service_healthy`.
+  - [ ] `api` is configured with
+        `PROVIDER_BASE_URL=http://simulator:5000` for Docker service DNS.
+  - [ ] `simulator` is configured with
+        `PROVIDER_API_KEY=test-api-key-not-a-secret`.
+  - [ ] `.env.example` contains only the variables required by `api` and
+        `simulator`, with placeholder values.
+  - [ ] No `MYSQL_*` variable, no `DATABASE_URL`, no database volume, no
+        database port mapping, and no database health check exists in P0.
   - [ ] No real secrets are present in either file.
 - **Traces to:** FR-001, FR-002, FR-010, AC-001
 
@@ -186,27 +198,37 @@
 
 ---
 
-### T-006: Create Integration Smoke Tests
+### T-006: Create Planned P0 Compose Success-Path E2E Smoke Tests
 
 - **Status:** ⬜
 - **Priority:** P1
 - **Branch:** `feature/integration-tests`
-- **Dependencies:** T-002, FastAPI and Flask services implemented (external).
-- **Description:** Create integration smoke tests that verify the end-to-end flow
-  via the Compose stack: sync trigger → invoice retrieval → dashboard check.
-- **Deliverables:**
+- **Dependencies:** T-002 (planned), FastAPI and Flask services implemented (external).
+- **Description:** Create a **planned** P0 Compose success-path E2E smoke test
+  suite. When the planned P0 `compose.yaml` is implemented and executed, the
+  tests verify only: simulator health; API health; one
+  `POST /api/v1/sync/invoices` success-path request; HTTP `200` and the
+  documented response envelope; with no fixed invoice count.
+- **Deliverables (planned):**
   - `tests/integration/test_smoke.py`
   - `tests/integration/conftest.py`
   - `tests/integration/requirements.txt`
 - **Acceptance Criteria:**
-  - [ ] Tests run against live Compose services.
-  - [ ] Tests verify sync job triggers successfully.
-  - [ ] Tests verify invoices are returned by the API.
-  - [ ] Tests verify provider 500 error handling (AC-005).
-  - [ ] Tests verify 429 retry/backoff scenarios (AC-005b).
-  - [ ] Tests verify pagination traversal (AC-006).
+  - [ ] Tests run against the planned live P0 Compose services.
+  - [ ] Tests verify simulator `/health` returns a healthy response.
+  - [ ] Tests verify `api` `/health` returns a healthy response.
+  - [ ] Tests verify one `POST /api/v1/sync/invoices` request returns
+        HTTP `200` and the documented response envelope.
+  - [ ] Tests do **not** assert a fixed invoice count; the simulator's
+        dynamic count is accepted.
+  - [ ] Tests do **not** assert database, persistence, schema, or
+        `DATABASE_URL` behavior — P0 has none.
+  - [ ] Tests do **not** assert live cross-service `429` → `503` E2E
+        coverage; that coverage is the separate T-009b task.
   - [ ] Tests are deterministic and independent.
-- **Traces to:** FR-007, AC-002, AC-005, AC-005b, AC-006
+  - [ ] This task is **planned**; it does not assert that the smoke tests
+        have been implemented, executed, or merged.
+- **Traces to:** FR-007, AC-001, AC-002, AC-005, AC-006
 
 ---
 
@@ -267,6 +289,34 @@
   - [ ] Integration test step exists (may be conditional on service availability).
 - **Traces to:** NFR-006, CSI-008
 
+### T-009b: Live Provider `429` → Public API `503` Cross-Service E2E — Deferred from P0
+
+- **Status:** ⬜
+- **Priority:** P1
+- **Branch:** `feature/live-429-e2e`
+- **Dependencies:** T-006 (planned P0 Compose success-path E2E), T-007 (contract tests), the API and simulator both implementing the live `429` mapping, and any separately approved future architecture, contract, and spec work.
+- **Description:** Implement and verify a **live** cross-service `429` E2E test
+  that exercises a real provider simulator `429` response and the public API's
+  `503` mapping through the planned P0 Compose stack. This task is
+  **deferred** out of P0: P0 retains only mocked API `429` mapping coverage
+  (per AC-005b, AC-006b).
+- **Deliverables:**
+  - Live `429` E2E test under `tests/integration/`
+  - Updated simulator and API implementations if/when the `429` mapping is
+    live-cross-service-ready
+- **Acceptance Criteria:**
+  - [ ] Test starts the planned P0 Compose stack with both services healthy.
+  - [ ] Test triggers the simulator's documented `simulate_error=429` path
+        (or equivalent live mechanism) from inside the API container.
+  - [ ] Test verifies the API responds with HTTP `503` and the documented
+        body shape for the live cross-service case.
+  - [ ] Test does **not** rely on URL hacks, query-string injection, public
+        test endpoints, retries/backoff, or API runtime changes to satisfy
+        this criterion.
+  - [ ] This task does **not** assert live E2E in P0; live `429` E2E is a
+        P1 deliverable.
+- **Traces to:** AC-005b (live cross-service coverage), FR-107
+
 ---
 
 ## P2 — Advanced Validation and Observability
@@ -313,15 +363,17 @@
 ```mermaid
 graph TD
     SPEC["Spec + Plan + Tasks<br/>(current work)"] --> T001["T-001: Provider Contract"]
-    SPEC --> T002["T-002: Compose Config"]
+    SPEC --> T002["T-002: Planned P0 Compose"]
     T001 --> T004["T-004: Contract Workflow Docs"]
     T002 --> T003["T-003: README"]
     T002 --> T005["T-005: Env Conventions Docs"]
     T001 --> T007["T-007: Contract Tests (P1)"]
-    T002 --> T006["T-006: Smoke Tests (P1)"]
+    T002 --> T006["T-006: Planned P0 Success-Path E2E (P1)"]
     T003 --> T008["T-008: Release Process (P1)"]
     T006 --> T009["T-009: CI Workflow (P1)"]
     T007 --> T009
+    T006 --> T009b["T-009b: Live 429 E2E (P1, deferred from P0)"]
+    T007 --> T009b
     T008 --> T011["T-011: Contributing Guide (P2)"]
     T010["T-010: ADRs (P2)"]
 ```
@@ -334,5 +386,5 @@ graph TD
 |---|---|---|
 | **P0** | T-001, T-002, T-003, T-004, T-005 | ⬜ Not started |
 | **P1** | T-005b | 🔄 In progress |
-| **P1** | T-006, T-007, T-008, T-009 | ⬜ Not started |
+| **P1** | T-006, T-007, T-008, T-009, T-009b | ⬜ Not started |
 | **P2** | T-010, T-011 | ⬜ Not started |
