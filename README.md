@@ -107,6 +107,23 @@ You can also inspect API documentation at:
 http://localhost:8000/docs
 ```
 
+## Automated Smoke Test
+
+Run the cross-platform P1 smoke check from the workspace root:
+
+```bash
+python scripts/smoke_test.py
+```
+
+The script validates Compose configuration, starts the local `api` and
+`simulator` services, waits for both to become healthy, verifies both health
+endpoints and one successful invoice-sync request, then tears the stack down.
+
+The script uses `.env` when it already exists. Otherwise it creates a temporary
+`.env` from `.env.example` and removes only that temporary file during cleanup.
+It does not test pagination, provider error flows, retries/backoff, database
+persistence, or live cross-service `429` → `503` behavior.
+
 ## Configuration
 
 | Variable | Purpose | Default |
