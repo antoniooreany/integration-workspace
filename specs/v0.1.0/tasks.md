@@ -213,6 +213,8 @@
   - `tests/integration/test_smoke.py`
   - `tests/integration/conftest.py`
   - `tests/integration/requirements.txt`
+  - `scripts/smoke_test.py` — cross-platform standard-library runner that
+    validates the planned P0 Compose success path and guarantees teardown.
 - **Acceptance Criteria:**
   - [ ] Tests run against the planned live P0 Compose services.
   - [ ] Tests verify simulator `/health` returns a healthy response.
@@ -226,6 +228,13 @@
   - [ ] Tests do **not** assert live cross-service `429` → `503` E2E
         coverage; that coverage is the separate T-009b task.
   - [ ] Tests are deterministic and independent.
+  - [ ] `python scripts/smoke_test.py` validates Compose configuration, starts
+        the planned local stack, waits for `api` and `simulator` to become
+        healthy, verifies both `/health` endpoints and one successful
+        `POST /api/v1/sync/invoices`, then tears the stack down.
+  - [ ] The runner validates HTTP `200`, `status: success`, integer
+        `fetched_count`, an `invoices` array, and
+        `fetched_count == len(invoices)` without requiring a fixed invoice count.
   - [ ] This task is **planned**; it does not assert that the smoke tests
         have been implemented, executed, or merged.
 - **Traces to:** FR-007, AC-001, AC-002, AC-005, AC-006
